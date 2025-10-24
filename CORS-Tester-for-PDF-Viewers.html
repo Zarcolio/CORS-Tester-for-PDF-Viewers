@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Tester for PDF Viewers</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --success-bg: #d4edda;
+            --success-border: #c3e6cb;
+            --success-text: #155724;
+            --warning-bg: #fff3cd;
+            --warning-border: #ffeeba;
+            --warning-text: #856404;
+            --error-bg: #f8d7da;
+            --error-border: #f5c6cb;
+            --error-text: #721c24;
+            --light-gray: #f8f9fa;
+            --gray-border: #ced4da;
+            --text-color: #343a40;
+            --bg-color: #f4f4f9;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1em;
+            box-sizing: border-box;
+        }
+
+        #container {
+            background: #fff;
+            padding: 2.5em;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 700px;
+            transition: all 0.3s ease;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 0.5em;
+        }
+        
+        p.subtitle {
+            text-align: center;
+            margin-bottom: 2em;
+            color: #6c757d;
+            line-height: 1.6;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        #urlInput {
+            width: 100%;
+            padding: 14px 40px 14px 14px; /* Make space for clear button */
+            margin-bottom: 15px;
+            border: 1px solid var(--gray-border);
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        #urlInput:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+
+        #clearInputBtn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-68%);
+            background: none;
+            border: none;
+            font-size: 20px;
+            line-height: 1;
+            color: #888;
+            cursor: pointer;
+            padding: 0 5px;
+            display: none; /* Hidden by default */
+        }
+
+        button#convertBtn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button#convertBtn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #result {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            word-wrap: break-word;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease;
+            max-height: 0;
+            overflow: hidden;
+        }
+        #result.show {
+            opacity: 1;
+            transform: translateY(0);
+            max-height: 500px; /* Allow space for content */
+        }
+        #result p {
+            margin: 0;
+            text-align: left;
+        }
+        #result a {
+            font-weight: 500;
+            color: var(--primary-hover);
+        }
+        #result .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #result .icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+        
+        /* Result states */
+        #result.success {
+            background-color: var(--success-bg); border-color: var(--success-border); color: var(--success-text);
+        }
+        #result.warning {
+            background-color: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text);
+        }
+        #result.error {
+            background-color: var(--error-bg); border-color: var(--error-border); color: var(--error-text);
+        }
+
+        .result-actions {
+            margin-top: 15px;
+        }
+        .copy-btn {
+            background: none;
+            border: 1px solid;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        #result.success .copy-btn { border-color: var(--success-text); color: var(--success-text); }
+        #result.warning .copy-btn { border-color: var(--warning-text); color: var(--warning-text); }
+
+        #result.success .copy-btn:hover { background: var(--success-text); color: white; }
+        #result.warning .copy-btn:hover { background: var(--warning-text); color: white; }
+
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <h1>CORS Tester for PDF Viewers</h1>
+        <p class="subtitle">Web PDF viewers can fail if a file is on another domain due to security (CORS) policies. This tool extracts the direct URL from a viewer link. Opening that direct link helps you diagnose if a loading error is CORS-related.</p>
+        
+        <div class="input-wrapper">
+            <label for="urlInput" class="sr-only">Enter PDF Viewer URL</label>
+            <input type="text" id="urlInput" placeholder="Paste your PDF viewer URL here..." autofocus oninput="toggleClearButton()">
+            <button id="clearInputBtn" onclick="clearInput()" aria-label="Clear input">&times;</button>
+        </div>
+        <button id="convertBtn" onclick="convertUrl()">Extract Direct URL</button>
+
+        <div id="result" aria-live="polite"></div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const resultDiv = document.getElementById('result');
+        const clearBtn = document.getElementById('clearInputBtn');
+
+        function toggleClearButton() {
+            clearBtn.style.display = urlInput.value ? 'block' : 'none';
+        }
+
+        function clearInput() {
+            urlInput.value = '';
+            urlInput.focus();
+            toggleClearButton();
+            resultDiv.className = '';
+        }
+
+        urlInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                convertUrl();
+            }
+        });
+
+        function convertUrl() {
+            let url = urlInput.value.trim();
+            resultDiv.className = ''; // Reset classes
+
+            if (url.startsWith('||')) {
+                url = url.substring(2);
+            }
+
+            if (!url) {
+                resultDiv.className = 'show error';
+                resultDiv.innerHTML = `<div class="result-header"><span class="icon">&#9888;</span>Error</div><p>Please enter a URL.</p>`;
+                return;
+            }
+
+            const searchParam = '?file=';
+            const fileParamIndex = url.indexOf(searchParam);
+
+            if (fileParamIndex !== -1) {
+                const baseUrl = url.substring(0, fileParamIndex);
+                let fileValue = url.substring(fileParamIndex + searchParam.length);
+
+                const paramIndex = fileValue.indexOf('&');
+                if (paramIndex !== -1) {
+                    fileValue = fileValue.substring(0, paramIndex);
+                }
+
+                let finalUrl;
+                
+                if (fileValue.toLowerCase().startsWith('http://') || fileValue.toLowerCase().startsWith('https://')) {
+                    finalUrl = fileValue;
+                } else {
+                    const originalUrlObject = new URL(baseUrl.startsWith('http') ? baseUrl : 'https://' + baseUrl);
+                    const domain = originalUrlObject.origin;
+                    finalUrl = domain + (fileValue.startsWith('/') ? fileValue : '/' + fileValue);
+                }
+                
+                showResult('success', 'Direct Link Extracted', `Use this URL for testing: <a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${finalUrl}</a>`, finalUrl);
+
+            } else {
+                const finalUrl = url.startsWith('http') ? url : 'https://' + url;
+                showResult('warning', 'Parameter Not Found', `The "?file=" parameter was not found. Here is a direct link to test for basic access: <a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${finalUrl}</a>`, finalUrl);
+            }
+        }
+
+        function showResult(type, title, message, urlToCopy) {
+            const icon = type === 'success' ? '&#10003;' : '&#9888;';
+            resultDiv.className = `show ${type}`;
+            resultDiv.innerHTML = `
+                <div class="result-header"><span class="icon">${icon}</span>${title}</div>
+                <p>${message}</p>
+                <div class="result-actions">
+                    <button class="copy-btn" onclick="copyToClipboard('${urlToCopy}')">Copy for Testing</button>
+                </div>`;
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const copyButton = resultDiv.querySelector('.copy-btn');
+                if (copyButton) {
+                    copyButton.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyButton.textContent = 'Copy for Testing';
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                alert('Could not copy text to clipboard.');
+            });
+        }
+    </script>
+
+</body>
+</html>```
