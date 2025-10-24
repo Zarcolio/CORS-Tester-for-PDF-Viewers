@@ -135,6 +135,7 @@
         #result a {
             font-weight: 500;
             color: var(--primary-hover);
+            word-break: break-all;
         }
         #result .result-header {
             display: flex;
@@ -195,47 +196,137 @@
     </div>
 
     <script>
+        // Elements
         const urlInput = document.getElementById('urlInput');
         const resultDiv = document.getElementById('result');
         const clearBtn = document.getElementById('clearInputBtn');
+        const convertBtn = document.getElementById('convertBtn');
 
+        // Show/hide clear button
         function toggleClearButton() {
             clearBtn.style.display = urlInput.value ? 'block' : 'none';
         }
 
+        // Clear input (keeps existing behavior)
         function clearInput() {
             urlInput.value = '';
             urlInput.focus();
             toggleClearButton();
+            // reset result area
             resultDiv.className = '';
+            resultDiv.textContent = '';
         }
 
+        // Key handlers: Enter and Escape
         urlInput.addEventListener('keyup', (event) => {
             if (event.key === 'Enter') {
                 convertUrl();
             }
         });
-
         urlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 clearInput();
             }
         });
 
+        // Utility: safe creation of the result UI without innerHTML and without injecting untrusted HTML
+        function showResult(type, titleText, messageText, urlToCopy) {
+            // clear previous
+            resultDiv.className = '';
+            resultDiv.textContent = '';
+
+            // header
+            const header = document.createElement('div');
+            header.className = 'result-header';
+            const icon = document.createElement('span');
+            icon.className = 'icon';
+            icon.textContent = type === 'success' ? '✓' : '⚠';
+            const title = document.createElement('span');
+            title.textContent = titleText;
+            header.appendChild(icon);
+            header.appendChild(title);
+
+            // message paragraph
+            const p = document.createElement('p');
+            // messageText may contain explanatory text; set as textContent for safety
+            p.textContent = messageText;
+
+            // If there's a usable URL, create a safe link element
+            let linkEl = null;
+            if (urlToCopy) {
+                try {
+                    // try to create a valid URL; if invalid, skip link creation
+                    // allow protocol-relative and add https if needed
+                    let href = urlToCopy;
+                    if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href)) {
+                        href = 'https://' + href;
+                    }
+                    const safeUrl = new URL(href);
+                    linkEl = document.createElement('a');
+                    linkEl.href = safeUrl.toString();
+                    linkEl.target = '_blank';
+                    linkEl.rel = 'noopener noreferrer';
+                    // show the display text as the original URLToCopy but as textContent (no HTML)
+                    linkEl.textContent = safeUrl.toString();
+                } catch (e) {
+                    // invalid URL, don't render link
+                    linkEl = null;
+                }
+            }
+
+            // actions container
+            const actions = document.createElement('div');
+            actions.className = 'result-actions';
+
+            if (linkEl) {
+                actions.appendChild(linkEl);
+            }
+
+            if (urlToCopy) {
+                const copyButton = document.createElement('button');
+                copyButton.className = 'copy-btn';
+                copyButton.type = 'button';
+                copyButton.textContent = 'Copy for Testing';
+                // attach safe event listener that uses navigator.clipboard
+                copyButton.addEventListener('click', () => {
+                    navigator.clipboard.writeText(urlToCopy).then(() => {
+                        const previous = copyButton.textContent;
+                        copyButton.textContent = 'Copied!';
+                        setTimeout(() => {
+                            copyButton.textContent = previous;
+                        }, 2000);
+                    }).catch(() => {
+                        alert('Could not copy text to clipboard.');
+                    });
+                });
+                actions.appendChild(copyButton);
+            }
+
+            // assemble result
+            resultDiv.appendChild(header);
+            resultDiv.appendChild(p);
+            if (actions.childNodes.length) resultDiv.appendChild(actions);
+
+            // apply visual class
+            resultDiv.className = `show ${type}`;
+        }
+
+        // main conversion logic (keeps original behavior, but uses showResult for output)
         function convertUrl() {
             let url = urlInput.value.trim();
             resultDiv.className = ''; // Reset classes
+            resultDiv.textContent = ''; // Clear contents
 
             if (url.startsWith('||')) {
                 url = url.substring(2);
             }
 
             if (!url) {
-                resultDiv.className = 'show error';
-                resultDiv.innerHTML = `<div class="result-header"><span class="icon">&#9888;</span>Error</div><p>Please enter a URL.</p>`;
+                showResult('error', 'Error', 'Please enter a URL.', '');
                 return;
             }
 
+            // Search for '?file=' (case-sensitive per original logic)
             const searchParam = '?file=';
             const fileParamIndex = url.indexOf(searchParam);
 
@@ -249,48 +340,34 @@
                 }
 
                 let finalUrl;
-                
-                if (fileValue.toLowerCase().startsWith('http://') || fileValue.toLowerCase().startsWith('https://')) {
+
+                // If fileValue looks like absolute URL
+                if (/^https?:\/\//i.test(fileValue)) {
                     finalUrl = fileValue;
                 } else {
-                    const originalUrlObject = new URL(baseUrl.startsWith('http') ? baseUrl : 'https://' + baseUrl);
-                    const domain = originalUrlObject.origin;
-                    finalUrl = domain + (fileValue.startsWith('/') ? fileValue : '/' + fileValue);
+                    try {
+                        const originalUrlObject = new URL(baseUrl.startsWith('http') ? baseUrl : 'https://' + baseUrl);
+                        const domain = originalUrlObject.origin;
+                        finalUrl = domain + (fileValue.startsWith('/') ? fileValue : '/' + fileValue);
+                    } catch (e) {
+                        // fallback: prefix https://
+                        finalUrl = (fileValue.startsWith('/') ? 'https://' + fileValue.replace(/^\/+/, '') : 'https://' + fileValue);
+                    }
                 }
-                
-                showResult('success', 'Direct Link Extracted', `Use this URL for testing: <a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${finalUrl}</a>`, finalUrl);
 
+                // Use showResult safely
+                showResult('success', 'Direct Link Extracted', 'Use this URL for testing:', finalUrl);
             } else {
                 const finalUrl = url.startsWith('http') ? url : 'https://' + url;
-                showResult('warning', 'Parameter Not Found', `The "?file=" parameter was not found. Here is a direct link to test for basic access: <a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${finalUrl}</a>`, finalUrl);
+                showResult('warning', 'Parameter Not Found', 'The "?file=" parameter was not found. Here is a direct link to test for basic access:', finalUrl);
             }
         }
 
-        function showResult(type, title, message, urlToCopy) {
-            const icon = type === 'success' ? '&#10003;' : '&#9888;';
-            resultDiv.className = `show ${type}`;
-            resultDiv.innerHTML = `
-                <div class="result-header"><span class="icon">${icon}</span>${title}</div>
-                <p>${message}</p>
-                <div class="result-actions">
-                    <button class="copy-btn" onclick="copyToClipboard('${urlToCopy}')">Copy for Testing</button>
-                </div>`;
-        }
+        // wire convert button as well (keeps existing UX)
+        convertBtn.addEventListener('click', convertUrl);
 
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                const copyButton = resultDiv.querySelector('.copy-btn');
-                if (copyButton) {
-                    copyButton.textContent = 'Copied!';
-                    setTimeout(() => {
-                        copyButton.textContent = 'Copy for Testing';
-                    }, 2000);
-                }
-            }).catch(err => {
-                console.error('Failed to copy text: ', err);
-                alert('Could not copy text to clipboard.');
-            });
-        }
+        // initialize toggle state
+        toggleClearButton();
     </script>
 
 </body>
