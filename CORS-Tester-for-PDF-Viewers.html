@@ -216,6 +216,12 @@
             }
         });
 
+        urlInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                clearInput();
+            }
+        });
+
         function convertUrl() {
             let url = urlInput.value.trim();
             resultDiv.className = ''; // Reset classes
